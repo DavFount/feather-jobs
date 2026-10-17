@@ -6,17 +6,24 @@ state. Independent of societies, ranks, wages, payroll, uniforms, locations,
 licenses, and general permissions; those remain with gameplay resources and
 other domains. Native Feather; no legacy compatibility layer.
 
+Version 0.2.0. [Contract 1](CONTRACT.md) is proposed for freezing; `CONTRACT.md`
+is the reference to code against, this README explains the model and setup.
+
 Implements phases J0–J3 of the Jobs master plan (`feather-framework-docs`,
 `feather-jobs/Feather_Jobs_Master_Plan.md`) on the Contract 1 service kernel. J4
-(Society adapter) is delivered by the `bcc-society` rewrite. J5 (consumer
-cutover) waits for the remaining job-reading scripts' Feather rewrites, and J6
-(legacy removal) has nothing left on the Feather side.
+(Society adapter) is delivered by `bcc-society` 2.0.0. The current J5 consumers
+(bcc-doorlocks, bcc-craft, bcc-stables, bcc-banks and bcc-housing) use
+`CheckAssignment` in their Feather ports. Code integration and live acceptance
+are tracked separately below. J6 has no legacy job fields left on the Feather
+side.
 
 Shipped defaults use `Config.DevMode=false` with service-policy authorization
 enabled. Acceptance fixtures receive no trust and development commands are not
 registered. The permanent server-console `JobsReleaseContractSmokeTest` is
 read-only and checks readiness, policy mode, development-command and fixture
-exclusion, publisher state, migrations, the client route, and capabilities.
+exclusion, publisher state, migrations, the client route, assignment integrity
+(open slots match open assignments; every active selection points at an open
+assignment of the same character), and capabilities.
 Enable DevMode only on an isolated development server; disable it and restart
 before packaging.
 
@@ -37,6 +44,29 @@ Development acceptance passed on 2026-10-02:
   event delivery.
 - `SocietyLiveTest` (bcc-society) passed 9/9 against Jobs as the reference
   consumer.
+
+Live acceptance with bcc-society 2.0.0 passed on 2026-10-11, two players:
+
+- `SocietyLiveTest` passed 12/12 (hire, promote, fire across two characters).
+- Offline changes: hire, promote (`nurse` 0 to `doctor` 10 on the same
+  assignment, revision 3 to 4) and fire of a character who was not connected.
+- Restart recovery: a restart right after a queued hire left no open workflow.
+- Duty: on/off and disconnect changed only the duty state, never the job or grade.
+- Two employers: one character held jobs at two societies; the active job
+  switched and ending one assignment left the other open.
+- Second consumer: the bcc-doorlocks job door check (`CheckAssignment` with
+  `dutyState = 'on_duty'`) passed on 2026-10-17 (see below).
+
+Acceptance of 0.2.0 on 2026-10-17, nobody connected (character UUIDs):
+
+- `JobsReleaseContractSmokeTest` passed 11/11, including assignment integrity.
+- `JobsLifecycleSmokeTest` passed 26/26, including two employers for one job,
+  the on-duty filter, active job switching, ending one assignment while the
+  other stays, and the stored reference.
+- bcc-doorlocks as second consumer: for a bcc-society `doctor` off duty,
+  `DoorlocksJobCheck` reported the job held and the door closed; after
+  `SocietyDevDuty <character> on 3` the door opened; after `off 3` it was
+  closed again.
 
 ## Dependencies
 
@@ -65,8 +95,9 @@ ensure feather-jobs
 ensure feather-admin
 ```
 
-The first start applies three checksummed migrations and logs
-`event=startup.ready migrationsApplied=3 routes=1`. Later starts apply none.
+The first start applies four checksummed migrations and logs
+`event=startup.ready migrationsApplied=4 routes=1`. Later starts apply none (an
+upgrade from 0.1.0 applies one: `004_job_event_references`).
 
 ## Installation and first acceptance
 
@@ -79,20 +110,31 @@ ensure feather-jobs
 JobsReleaseContractSmokeTest
 ```
 
-Expect 10/10 with the shipped configuration.
+Expect 11/11 with the shipped configuration.
 
 The mutating acceptance tests need `Config.DevMode=true` on an isolated
-development server. Enable it, restart feather-jobs, and run with a character
-loaded:
+development server. Enable it, restart feather-jobs, and run it for a character
+(a UUID works offline) whose active job, if any, is not owned by another
+resource; a character without a job is simplest:
 
 ```text
 JobsLifecycleSmokeTest <serverId|characterUuid>
 ```
 
-Expect 20/20. The test mutates data: it registers a uniquely keyed `smoke_*`
-job, assigns it, walks the lifecycle, ends the assignment, and retires the job.
+Expect 26/26. The test mutates data: it registers a uniquely keyed `smoke_*`
+job, assigns it, adds the same job for a second employer (a separate
+assignment), checks that an on-duty filter skips the off-duty one, switches the
+active job, ends one assignment while the other stays, records a reference,
+walks grade and duty changes, ends the assignments, and retires the job. It
+runs as feather-jobs, so it needs both Jobs policy actions granted to
+`feather-jobs` while it runs.
 
-For the second-resource check, also add the fixture's policy grant
+The optional `feather-jobs-tests` fixture is not included in this repository
+or the current development-server resources. The recorded 14/14 result above
+is historical acceptance evidence. To rerun it, first obtain the fixture used
+for that acceptance run.
+
+With the fixture installed on an isolated development server, add its policy grant
 (`Config.servicePolicy['feather-jobs']['feather-jobs-tests']` with
 `jobs.definition.manage` and `jobs.assignment.manage`) to feather-admin, restart
 feather-admin, then:
@@ -102,8 +144,8 @@ ensure feather-jobs-tests
 JobsConsumerLiveTest <serverId>
 ```
 
-Expect 14/14. The fixture is described in `[test]/feather-jobs-tests/README.md`.
-Remove the fixture grant and set DevMode back to `false` afterwards.
+Expect 14/14 for that fixture version. Remove its policy grant, stop the fixture,
+set DevMode back to `false`, and restart feather-jobs and feather-admin afterwards.
 
 If the first mutation returns `authorization_denied`, restart feather-admin so it
 loads the `['feather-jobs']` service-policy grants.
@@ -116,9 +158,14 @@ The shipped configuration is the production posture. Run after startup:
 JobsReleaseContractSmokeTest
 ```
 
-Expect 10/10: the development lifecycle command is not registered and the
-`feather-jobs-tests` fixture receives no trust. Feather-admin's service policy
-grants Jobs actions only to `feather-jobs`, `feather-admin` and `bcc-society`.
+Expect 11/11: the development lifecycle command is not registered and the
+`feather-jobs-tests` fixture receives no trust. Each resource that registers
+definitions or changes assignments needs its own entry in
+`Config.servicePolicy['feather-jobs']` in feather-admin. The development server
+already grants `bcc-society` both `jobs.definition.manage` and
+`jobs.assignment.manage`. Verify these grants in the Admin configuration you
+deploy; Jobs does not install them. Resources that only read need
+`trustedReaders` and no mutation grant.
 
 ## Ownership and decisions
 
@@ -162,7 +209,10 @@ integer 0–60000) report lifecycle.
 Every mutation takes a stable `requestId` (at most 128 characters) and a
 namespaced `reasonCode` such as `society.hire`. It also accepts an optional
 `actorSource` (the player who triggered it; Jobs derives that player's account
-and character from Core) and an optional `correlationId`. Retrying a request ID
+and character from Core), an optional `correlationId`, and an optional
+`referenceType` + `referenceId` (the caller's record behind the change, for
+example `society_membership` and its ID), stored on the audit event and
+published with it. Retrying a request ID
 with the same payload replays the stored result with `replayed = true`; reusing it
 with a different payload returns `idempotency_conflict`.
 
@@ -260,8 +310,8 @@ Payloads are bounded to 4096 bytes.
 `Config.Access` holds the trusted resource groups: `trustedReaders`,
 `trustedRegistrars` (with `privilegedRegistrars`), `trustedAssigners` (with
 `privilegedAssigners`), and `trustedAuditors` (with `privilegedAuditors`). A
-privileged entry must also be in its trusted group. Each consumer additionally
-needs `jobs.definition.manage` and/or `jobs.assignment.manage` in
+privileged entry must also be in its trusted group. Each consumer that mutates
+Jobs additionally needs `jobs.definition.manage` and/or `jobs.assignment.manage` in
 `Config.servicePolicy['feather-jobs'][<resource>]` of feather-admin; restart
 feather-admin after changing it.
 
@@ -269,8 +319,98 @@ feather-admin after changing it.
 (validated through feather-organizations, which must list `feather-jobs` in its
 `trustedReaders`) and `society` (trusted to the owning resource).
 
-Current consumer: `bcc-society` (reference consumer). The development fixture
-`feather-jobs-tests` is trusted only while DevMode is on.
+Current consumers:
+
+| Resource | Access | Uses |
+|---|---|---|
+| `bcc-society` | readers, registrars, assigners, auditors + service grant | Reference consumer: job types, hire/promote/fire, duty, active job |
+| `bcc-doorlocks` | `trustedReaders` | Job doors (`CheckAssignment`) |
+| `bcc-craft` | `trustedReaders` | Job-restricted crafting (`CheckAssignment`) |
+| `bcc-stables` | `trustedReaders` | Trainer-only taming and training (`Config.trainerJob`) |
+| `bcc-banks` | `trustedReaders` | Bank administration by job (`Config.Admin.jobs`, default `banker`) |
+| `bcc-housing` | `trustedReaders` | Realtor staff and agent shops by job (`Config.Admin.jobs`, agent `jobs`) |
+
+The development fixture `feather-jobs-tests` is trusted only while DevMode is on.
+
+### Adding a consumer
+
+Keep the entries already in each list and add the new resource. Then restart, in
+this order: `feather-organizations` (if changed), `feather-jobs`, `feather-admin`
+(if changed), and the consumer last.
+
+**A resource that only checks jobs** (doors, crafting, shops) needs one entry, in
+`feather-jobs/config.lua`:
+
+```lua
+Access = {
+    trustedReaders = { ['feather-jobs'] = true, ['feather-admin'] = true,
+        ['bcc-society'] = true, ['my-doors'] = true },
+    -- other groups unchanged
+}
+```
+
+It then calls `CheckAssignment` and needs no service grant. Without the entry
+every check returns `authorization_denied`.
+
+**A resource that defines jobs or hires, promotes and fires** (a society or job
+center) needs four groups in `feather-jobs/config.lua`:
+
+```lua
+Access = {
+    trustedReaders    = { --[[ ... ]] ['my-society'] = true },
+    trustedRegistrars = { --[[ ... ]] ['my-society'] = true }, -- RegisterJobDefinition, DefineGrade
+    trustedAssigners  = { --[[ ... ]] ['my-society'] = true }, -- CreateAssignment, ChangeAssignmentGrade,
+                                                               -- SetDutyState, SetActiveAssignment, EndAssignment
+    trustedAuditors   = { --[[ ... ]] ['my-society'] = true }, -- InspectJobHistory on its own records
+    -- privileged* groups: leave them to feather-admin
+}
+```
+
+and a service grant in `feather-admin/configs/service_policy.lua`. The outer key
+is the domain asking (`feather-jobs`), the inner key the calling resource:
+
+```lua
+Config.servicePolicy = {
+    -- existing domains unchanged
+    ['feather-jobs'] = {
+        ['my-society'] = {
+            ['jobs.definition.manage'] = true, -- register job types and grades
+            ['jobs.assignment.manage'] = true  -- hire, promote, duty, fire
+        }
+    }
+}
+```
+
+A missing trust entry fails with `authorization_denied` ("not trusted"); a missing
+grant fails with `authorization_denied` from the policy, or `policy_unavailable`
+when feather-admin is not started.
+
+**Organization employers.** Assignments with `employerType = 'organization'` are
+validated through feather-organizations, which must trust Jobs as a reader in
+`feather-organizations/config.lua`:
+
+```lua
+Access = {
+    trustedReaders = { --[[ ... ]] ['feather-jobs'] = true },
+}
+```
+
+**Consumer configuration examples.** Job rules live in the consumer, as job keys
+and grade ordinals that Jobs knows:
+
+```lua
+-- bcc-doorlocks config.lua: doors store job keys; opening asks CheckAssignment.
+Config.JobAccess = { requireOnDuty = true }   -- dutyState = 'on_duty'
+
+-- bcc-craft configs/*.lua: one recipe limited to chefs of grade 10 or higher.
+requiredJobs = { { 'chef', 10 } },            -- { jobKey, minimum grade ordinal }
+
+-- bcc-stables config/main.lua: trainers only.
+Config.trainerJob = { { name = 'trainer', grade = 0 } }
+```
+
+The job keys must exist in Jobs: they are registered by the resource that owns
+them (bcc-society registers its `Config.Jobs` types on start).
 
 ## Database access
 
@@ -288,10 +428,14 @@ when it also selects the active assignment), down from 19.
 
 ## Remaining work
 
-- **J5 consumer cutover:** bcc-doorlocks, bcc-craft and bcc-housing still read
-  `character.job`/`jobGrade`. They are VORP and bcc-utils scripts that are not
-  running on Feather yet, so each moves to `CheckAssignment` as part of its own
-  Feather rewrite, as bcc-society did.
-- **J6 legacy removal:** nothing remains on the Feather side. feather-character
-  has no job fields or job mutators, and no Feather resource reads a character
-  job. The legacy fields exist only in the VORP-era scripts above.
+- **J5 live validation:** the current consumers listed above are integrated
+  through `CheckAssignment`, including housing realtor and agent-shop checks.
+  The bcc-doorlocks on-duty door check passed offline on 2026-10-17
+  (`DoorlocksJobCheck <characterUuid> <jobKey>` before and after
+  `SocietyDevDuty <characterUuid> on <society id>`). Validate the other
+  consumers' job and grade rules in game before declaring their gameplay
+  acceptance complete.
+- **J6 legacy removal:** feather-character has no job fields or job mutators.
+  The listed Feather consumer ports use Jobs rather than legacy character fields.
+- **Optional acceptance fixture:** restore `feather-jobs-tests` separately if
+  the historical second-resource acceptance needs to be rerun.
