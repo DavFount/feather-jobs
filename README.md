@@ -1,12 +1,21 @@
 # Feather Jobs
 
+Alpha release 0.2.1 (2026-10-20): Config.DevMode stays true for this early-alpha
+release at owner direction. Native organization fixtures are supplied by the sibling
+feather-jobs-tests resource. Run NativeDomainFixtureTest <stableRun> [characterUUID|serverID]
+from the console: 13/13 with a character, 10/10 without. It prints the exact
+read-only JobsNativeIntegrationSmokeTest commands (7/7 each). Retain the same run
+ID and character for replay after restart. Production-default guidance and prior
+Society acceptance below describe their separate release/historical configurations.
+No production-default toggle is required during this development increment.
+
 Authoritative job domain for the Feather Framework: job definitions, grades,
 character assignments, the optional active assignment, and per-assignment duty
 state. Independent of societies, ranks, wages, payroll, uniforms, locations,
 licenses, and general permissions; those remain with gameplay resources and
 other domains. Native Feather; no legacy compatibility layer.
 
-Version 0.2.0. [Contract 1](CONTRACT.md) is proposed for freezing; `CONTRACT.md`
+Version 0.2.1. [Contract 1](CONTRACT.md) is proposed for freezing; `CONTRACT.md`
 is the reference to code against, this README explains the model and setup.
 
 Implements phases J0–J3 of the Jobs master plan (`feather-framework-docs`,
@@ -17,15 +26,16 @@ Implements phases J0–J3 of the Jobs master plan (`feather-framework-docs`,
 are tracked separately below. J6 has no legacy job fields left on the Feather
 side.
 
-Shipped defaults use `Config.DevMode=false` with service-policy authorization
-enabled. Acceptance fixtures receive no trust and development commands are not
-registered. The permanent server-console `JobsReleaseContractSmokeTest` is
+This alpha ships `Config.DevMode=true` with service-policy authorization enabled.
+Development commands and exact development fixture trust are enabled. The
+permanent server-console `JobsReleaseContractSmokeTest` is
 read-only and checks readiness, policy mode, development-command and fixture
 exclusion, publisher state, migrations, the client route, assignment integrity
 (open slots match open assignments; every active selection points at an open
 assignment of the same character), and capabilities.
-Enable DevMode only on an isolated development server; disable it and restart
-before packaging.
+Its production-exclusion checks intentionally fail under this alpha configuration;
+keep DevMode true for the current alpha PR/release. Historical production-posture
+results below were obtained with a different configuration.
 
 Production-surface acceptance passed 10/10 on 2026-10-02: Jobs ready, DevMode
 disabled, development commands absent, fixture trust absent, authorization
@@ -67,6 +77,19 @@ Acceptance of 0.2.0 on 2026-10-17, nobody connected (character UUIDs):
   `DoorlocksJobCheck` reported the job held and the door closed; after
   `SocietyDevDuty <character> on 3` the door opened; after `off 3` it was
   closed again.
+
+## Native organization wiring check
+
+`JobsNativeIntegrationSmokeTest <organizationUUID> <active|inactive|missing>`
+is console-only and read-only, available with either DevMode setting. Use an
+existing organization UUID with its expected eligibility, or a known absent UUID
+with `missing`. Expect 7/7: readiness, enabled policy, native definition/assignment
+policy grants, foreign-principal denial and real organization employer validation.
+It does not create assignments or alter organizations/providers. Organizations
+must trust Jobs as a reader; Admin must load the exact native Jobs service grants.
+Restart those resources after their config changes, then restart Jobs. No manifest
+change or refresh is required for this increment. Historical Society acceptance
+above does not establish this native integration's live acceptance.
 
 ## Dependencies
 
@@ -110,7 +133,8 @@ ensure feather-jobs
 JobsReleaseContractSmokeTest
 ```
 
-Expect 11/11 with the shipped configuration.
+Expect 11/11 only with the historical production configuration. The current alpha
+keeps DevMode true; use the native fixture checks above for this release.
 
 The mutating acceptance tests need `Config.DevMode=true` on an isolated
 development server. Enable it, restart feather-jobs, and run it for a character
@@ -145,14 +169,16 @@ JobsConsumerLiveTest <serverId>
 ```
 
 Expect 14/14 for that fixture version. Remove its policy grant, stop the fixture,
-set DevMode back to `false`, and restart feather-jobs and feather-admin afterwards.
+restart feather-jobs and feather-admin afterwards if policy config changed.
+Keep DevMode true for the current alpha release.
 
 If the first mutation returns `authorization_denied`, restart feather-admin so it
 loads the `['feather-jobs']` service-policy grants.
 
 ## Production posture
 
-The shipped configuration is the production posture. Run after startup:
+The following describes a future production posture, not this alpha's shipped
+DevMode=true configuration. No toggle is required for the alpha release:
 
 ```text
 JobsReleaseContractSmokeTest

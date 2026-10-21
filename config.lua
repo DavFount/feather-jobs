@@ -2,7 +2,7 @@ Config = {
     Contract = 1,
     RequiredCoreContract = 1,
     ReadinessTimeoutMs = 30000,
-    DevMode = false,
+    DevMode = true,
     Outbox = { pollIntervalMs = 1000, retryDelaySeconds = 5, batchSize = 20 },
 
     -- J0 decisions (see README): multiple simultaneous assignments, optional
@@ -36,7 +36,7 @@ Config = {
     },
 
     Access = {
-        trustedReaders = { ['feather-jobs'] = true, ['feather-admin'] = true, ['bcc-society'] = true,
+        trustedReaders = { ['feather-jobs'] = true, ['feather-admin'] = true, ['feather-access'] = true, ['bcc-society'] = true,
             ['bcc-stables'] = true, ['bcc-doorlocks'] = true,
             ['bcc-craft'] = true, ['bcc-banks'] = true, ['bcc-housing'] = true },
         -- May register job definitions/grades they will own.
